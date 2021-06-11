@@ -30,8 +30,11 @@ module ActiveRecord
             target.delete
           when :destroy
             target.destroyed_by_association = reflection
-            target.destroy
-            throw(:abort) unless target.destroyed?
+
+            unless target.destroy
+              owner.errors.add(reflection.name, :invalid)
+              throw(:abort)
+            end
           when :destroy_async
             primary_key_column = target.class.primary_key.to_sym
             id = target.public_send(primary_key_column)
