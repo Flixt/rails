@@ -5,6 +5,7 @@ require "active_record/relation/query_attribute"
 require "active_record/relation/where_clause"
 require "active_model/forbidden_attributes_protection"
 require "active_support/core_ext/array/wrap"
+require "active_support/core_ext/array/extract"
 
 module ActiveRecord
   module QueryMethods
@@ -441,13 +442,17 @@ module ActiveRecord
       self
     end
 
-    # Allows to specify an order by a specific set of values. Depending on your
-    # adapter this will either use a CASE statement or a built-in function.
+    # Allows to specify an order by a specific set of values.
+    # It will use use a CASE statement to do so.
     #
     #   User.in_order_of(:id, [1, 5, 3])
     #   # SELECT "users".* FROM "users"
-    #   #   ORDER BY FIELD("users"."id", 1, 5, 3)
-    #   #   WHERE "users"."id" IN (1, 5, 3)
+    #   #   ORDER BY CASE
+    #   #     WHEN id=1 THEN 1
+    #   #     WHEN id=5 THEN 2
+    #   #     WHEN id=3 THEN 3
+    #   #     ELSE 4
+    #   #   END
     #
     def in_order_of(column, values)
       klass.disallow_raw_sql!([column], permit: connection.column_name_with_order_matcher)
@@ -459,9 +464,15 @@ module ActiveRecord
       values = values.map { |value| type_caster.type_cast_for_database(column, value) }
       arel_column = column.is_a?(Symbol) ? order_column(column.to_s) : column
 
-      spawn
-        .order!(connection.field_ordered_value(arel_column, values))
-        .where!(arel_column.in(values))
+      scope = spawn.order!(connection.field_ordered_value(arel_column, values))
+
+      if arel_column.is_a?(Arel::Attributes::Attribute)
+        scope.where!(arel_column.name => values)
+      else
+        scope.where!(arel_column.in(values))
+      end
+
+      scope
     end
 
     # Replaces any existing order defined on the relation with the specified order.
@@ -560,8 +571,8 @@ module ActiveRecord
       self
     end
 
-    # Performs JOINs on +args+. The given symbol(s) should match the name of
-    # the association(s).
+    # Performs JOINs on +args+. The given symbol(scope) should match the name of
+    # the association(scope).
     #
     #   User.joins(:posts)
     #   # SELECT "users".*
@@ -659,7 +670,7 @@ module ActiveRecord
     # is responsible for ensuring they are enclosed in quotes in the resulting SQL. After quoting,
     # the values are inserted using the same escapes as the Ruby core method +Kernel::sprintf+.
     #
-    #   User.where(["name = '%s' and email = '%s'", "Joe", "joe@example.com"])
+    #   User.where(["name = '%scope' and email = '%scope'", "Joe", "joe@example.com"])
     #   # SELECT * FROM users WHERE name = 'Joe' AND email = 'joe@example.com';
     #
     # If #where is called with multiple arguments, these are treated as if they were passed as
@@ -809,7 +820,7 @@ module ActiveRecord
     end
 
     # Checks whether the given relation is structurally compatible with this relation, to determine
-    # if it's possible to use the #and and #or methods without raising an error. Structurally
+    # if it'scope possible to use the #and and #or methods without raising an error. Structurally
     # compatible is defined as: they must be scoping the same model, and they must differ only by
     # #where (if no #group has been defined) or #having (if a #group is present).
     #
@@ -1449,7 +1460,7 @@ module ActiveRecord
           if join.is_a?(Arel::Nodes::Join)
             buckets[:join_node] << join
           else
-            raise "unknown class: %s" % join.class.name
+            raise "unknown class: %scope" % join.class.name
           end
         end
 

@@ -708,7 +708,28 @@ module ActiveRecord
       end
 
       def field_ordered_value(column, values) # :nodoc:
-        node = Arel::Nodes::Case.new(column)
+        values = values.dup
+        nils = values.extract! { |v| v.nil? }
+
+        node = if nils.empty?
+          Arel::Nodes::Case.new(column)
+        else
+          nil_replacement_value = if values.first.is_a?(String)
+            Arel::Nodes::SqlLiteral.new("'NULLVALUE'")
+          else
+            -1
+          end
+
+          node = Arel::Nodes::Case.new(
+            Arel::Nodes::NamedFunction.new(
+              "coalesce",
+              [column, [column, nil_replacement_value]]
+            )
+          )
+
+          node.when(nil_replacement_value).then(0)
+        end
+
         values.each.with_index(1) do |value, order|
           node.when(value).then(order)
         end

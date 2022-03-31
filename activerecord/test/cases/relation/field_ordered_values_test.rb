@@ -57,4 +57,30 @@ class FieldOrderedValuesTest < ActiveRecord::TestCase
 
     assert_equal(order, posts.map(&:id))
   end
+
+  def test_in_order_of_with_nil_values
+    Book.destroy_all
+    Book.create!(name: 'Name A')
+    Book.create!(name: 'Name B')
+    Book.create!(name: 'Name C')
+    Book.create!(name: nil)
+
+    order = [nil, 'Name B', 'Name A', 'Name C']
+    books = Book.in_order_of(:name, order)
+
+    assert_equal(order, books.map(&:name))
+  end
+
+  def test_in_order_of_with_nil_values_for_enum
+    Book.destroy_all
+    Book.create!(last_read: :unread)
+    Book.create!(last_read: :reading)
+    Book.create!(last_read: :read)
+    Book.create!(last_read: :forgotten) # mapped enum value is nil
+
+    order = [Book.last_reads[:forgotten], Book.last_reads[:reading], Book.last_reads[:unread], Book.last_reads[:read]]
+    books = Book.in_order_of(:last_read, order)
+
+    assert_equal(order, books.map { |book| Book.last_reads[book.last_read] })
+  end
 end
